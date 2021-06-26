@@ -66,6 +66,12 @@ Once you trained the model, you can see the result on tensorboard (we perform th
 > --test
 
 that will skip all the training procedure and test the model on test data.
+## Overview:
+<img src="image/ESM.png" width="800"/>
+
+## Result:
+<img src="image/result1.png" width="1000"/>
+<img src="image/vis1.png" width="1000"/>
 # Reference
 
 [MiB](https://github.com/fcdl94/MiB)
