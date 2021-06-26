@@ -1,7 +1,7 @@
 # UCD
 The offical Pytorch code for "Uncertainty-aware Contrastive Distillation for Incremental Semantic Segmentation"
 ## Overview:
-<img src="image/ESM.png" width="800"/>
+<img src="image/ESM.png" width="500"/>
 
 # Requirements
 This repository uses the following libraries:
