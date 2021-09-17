@@ -1,6 +1,8 @@
 from torchvision.transforms.functional import normalize
 import torch.nn as nn
 import numpy as np
+import torch.nn.functional as F
+import torch
 
 
 def denormalize(tensor, mean, std):
@@ -36,16 +38,16 @@ def fix_bn(model):
 def color_map(dataset):
     if dataset=='voc':
         return voc_cmap()
-    elif dataset=='cityscapes':
+    elif dataset=='city':
         return cityscapes_cmap()
     elif dataset=='ade':
         return ade_cmap()
 
 
 def cityscapes_cmap():
-    return np.array([(128, 64,128), (244, 35,232), ( 70, 70, 70), (102,102,156), (190,153,153), (153,153,153), (250,170, 30), 
+    return np.array([(  0,  0,  0),(128, 64,128), (244, 35,232), ( 70, 70, 70), (102,102,156), (190,153,153), (153,153,153), (250,170, 30),
                          (220,220,  0), (107,142, 35), (152,251,152), ( 70,130,180), (220, 20, 60), (255,  0,  0), (  0,  0,142), 
-                         (  0,  0, 70), (  0, 60,100), (  0, 80,100), (  0,  0,230), (119, 11, 32), (  0,  0,  0)], 
+                         (  0,  0, 70), (  0, 60,100), (  0, 80,100), (  0,  0,230), (119, 11, 32) ],
                          dtype=np.uint8)
 
 
@@ -250,3 +252,207 @@ def convert_bn2gn(module):
         mod.add_module(name, convert_bn2gn(child))
     del module
     return mod
+
+def pre_contractive_pixel(f_n, l_n, l_po=None, f_o=None):
+    out_size = f_n.shape[-2:]
+    ### for pascal bicubic ade bilinear
+    # label_n = F.interpolate(torch.tensor(l_n.clone().detach(), dtype=torch.float32).unsqueeze(1), size=out_size,
+    #                         mode="bilinear", align_corners=False).type(torch.int8)
+    # label_n = nn.AvgPool2d(16, stride=16)(torch.tensor(l_n.clone().detach(),dtype=torch.float32).unsqueeze(1)).type(torch.int8)
+    ## worse
+    ### for vis
+    label_n=F.interpolate(torch.tensor(l_n,dtype=torch.float32).unsqueeze(1), size=out_size, mode="bilinear", align_corners=False).type(torch.int8)
+    # label_n = nn.AvgPool2d(16, stride=16)(torch.tensor(l_n,dtype=torch.float32).unsqueeze(1)).type(torch.int8)
+    ## worse
+    label_n[label_n < 0] = 0
+    label_n[label_n > 20] = 0
+    # print(label_n.shape)
+    # print(torch.unique(label_n))
+    B, N, h, w = f_n.size()
+    # print(f_n.size())
+    f_n = f_n.permute(0, 2, 3, 1)
+    f_n = f_n.reshape(B, h * w, N)
+
+    if f_o is not None and l_po is None:
+        ### pixel to pixel double
+        f_o = f_o.detach().permute(0, 2, 3, 1)
+        f_o = f_o.reshape(B, h * w, N)
+        Output = torch.cat((f_n.reshape(B * h * w, N), f_o.reshape(B * h * w, N)), dim=0)
+        Output = F.normalize(Output, dim=1)
+        Lable = torch.cat((label_n.reshape(B * h * w), label_n.reshape(B * h * w)))
+    if f_o is None and l_po is None:
+        ### pixel to pixel single
+        Output = f_n.reshape(B * h * w, N)
+        Output = F.normalize(Output, dim=1)
+        Lable = label_n.reshape(B * h * w)
+
+    ### with background
+    # if f_o is not None and l_po is not None:
+    #     ### double and mix label
+    #     f_o = f_o.detach().permute(0, 2, 3, 1)
+    #     f_o = f_o.reshape(B, h * w, N)
+    #     Output = torch.cat((f_n.reshape(B * h * w, N),f_o.reshape(B * h * w, N)),dim=0)
+    #     Output = F.normalize(Output, dim=1)
+    #     label_n=label_n.squeeze()
+    #     ### add Joint probality mask
+    #     B, N, h, w = l_po.shape
+    #     l_po_ = l_po.permute(0, 2, 3, 1)
+    #     l_po_ = l_po_.reshape(B, h * w, N)
+    #     l_po_ = l_po_.reshape(B * h * w, N)
+    #     ### new from gt set to 1
+    #     l_po_=torch.cat((l_po_, l_po_))
+    #     JM_p=torch.mm(l_po_,l_po_.T)
+    #     Lable_n=torch.cat((label_n.reshape(B * h * w),label_n.reshape(B * h * w)))
+    #     Lable_n[Lable_n>0]=1
+    #     Lable_n=Lable_n.unsqueeze(dim=1)
+    #     M_gt=torch.mm(Lable_n,Lable_n.T)
+    #     JM_p[M_gt==1]=1
+    #     _,label_po = l_po.max(dim=1)
+    #     label_n[label_n==0]=label_po.cpu().to(label_n.dtype)[label_n==0]
+    #     Lable=torch.cat((label_n.reshape(B * h * w),label_n.reshape(B * h * w)))
+    #
+    #     return Output.unsqueeze(1),Lable,JM_p.detach()
+    ### without background
+    if f_o is not None and l_po is not None:
+
+        version = 'v2'
+        if version == 'v1':
+            ## mix label
+            label_mix = label_n.squeeze()
+            _, label_po = l_po.max(dim=1)
+            label_mix[label_mix == 0] = label_po.cpu().to(label_mix.dtype)[label_mix == 0]
+            label_ = label_mix.reshape(B * h * w)
+            Lable = torch.cat((label_[label_ > 0], label_[label_ > 0]))
+            ##double
+            f_o = f_o.detach().permute(0, 2, 3, 1)
+            f_o = f_o.reshape(B, h * w, N)
+            Output = torch.cat((f_n.reshape(B * h * w, N)[label_ > 0], f_o.reshape(B * h * w, N)[label_ > 0]), dim=0)
+            Output = F.normalize(Output, dim=1)
+
+            ## make joint probality mask
+            B, N, h, w = l_po.shape
+            l_po_ = l_po.permute(0, 2, 3, 1)
+            l_po_ = torch.softmax(l_po_, dim=-1)
+            l_po_ = l_po_.reshape(B, h * w, N)
+            l_po_ = l_po_.reshape(B * h * w, N)
+            l_po_ = torch.cat((l_po_[label_ > 0], l_po_[label_ > 0]))
+            JM_p = torch.mm(l_po_, l_po_.T)
+            label_N = label_n
+            label_N[label_n > 0] = 1
+            Label_N = torch.cat((label_N.reshape(B * h * w)[label_ > 0], label_N.reshape(B * h * w)[label_ > 0]))
+            Lable_N = Label_N.unsqueeze(dim=1)
+            M_gt = torch.mm(Lable_N, Lable_N.T)
+            JM_p[M_gt == 1] = 1
+
+            return Output, Lable, JM_p
+
+        elif version == 'v2':
+
+            ## mix label
+            mask_new_classes = label_n.view(B * h * w) > 0
+            min_new_classes = label_n.view(B * h * w)[mask_new_classes].min()
+            label_mix = label_n.squeeze()
+            _, label_po = l_po.max(dim=1)
+            label_mix[label_mix == 0] = label_po.cpu().to(label_mix.dtype)[label_mix == 0]
+            label_ = label_mix.reshape(B * h * w)
+            Lable_anchor = label_[label_ > 0].clone()
+            Lable_contrast = torch.cat((Lable_anchor,label_[(label_ > 0) & ~mask_new_classes]))
+            ##double
+            f_o = f_o.detach().permute(0, 2, 3, 1)
+            f_o = f_o.reshape(B, h * w, N)
+            Output_anchor = F.normalize(f_n.reshape(B * h * w, N)[label_ > 0], dim=1)
+            Output_contrast = torch.cat((Output_anchor,F.normalize(f_o.reshape(B * h * w, N)[(label_ > 0) & ~mask_new_classes], dim=1)), dim=0).detach()
+
+            ## make joint probality mask
+            B, N, h, w = l_po.shape
+            l_po_ = l_po.permute(0, 2, 3, 1)
+            l_po_ = torch.softmax(l_po_, dim=-1)
+            l_po_ = l_po_.reshape(B, h * w, N)
+            l_po_ = l_po_.reshape(B * h * w, N)
+            l_po_anchor = l_po_[label_ > 0]
+            l_po_contrast = torch.cat((
+                l_po_[label_ > 0],
+                l_po_[(label_ > 0) & ~mask_new_classes]))
+            JM_p = torch.mm(l_po_anchor, l_po_contrast.T)
+            # mask old classes on anchor labels
+            mask_anchor_jp = Lable_anchor.clone()
+            mask_new_classes_anchor = mask_anchor_jp >= min_new_classes
+            mask_anchor_jp[mask_new_classes_anchor] = 1
+            mask_anchor_jp[~mask_new_classes_anchor] = 0
+            # mask old classes on anchor labels
+            mask_contrast_jp = Lable_contrast.clone()
+            mask_new_classes_contrast = mask_contrast_jp >= min_new_classes
+            mask_contrast_jp[mask_new_classes_contrast] = 1
+            mask_contrast_jp[~mask_new_classes_contrast] = 0
+            # fix gt with gt cases
+            mask_anchor_jp=mask_anchor_jp.unsqueeze(dim=1)
+            mask_contrast_jp=mask_contrast_jp.unsqueeze(dim=1)
+            M_gt = torch.mm(mask_anchor_jp, mask_contrast_jp.T)
+            JM_p[M_gt == 1] = 1
+
+            return Output_anchor, Output_contrast, Lable_anchor, Lable_contrast, JM_p.detach()
+
+    # import ipdb; ipdb.set_trace()
+
+    return Output.unsqueeze(1), Lable
+
+
+def shoot_infs(inp_tensor):
+    """Replaces inf by maximum of tensor"""
+    mask_inf = torch.isinf(inp_tensor)
+    ind_inf = torch.nonzero(mask_inf)
+    if len(ind_inf) > 0:
+        for ind in ind_inf:
+            if len(ind) == 2:
+                inp_tensor[ind[0], ind[1]] = 0
+            elif len(ind) == 1:
+                inp_tensor[ind[0]] = 0
+        m = torch.max(inp_tensor)
+        for ind in ind_inf:
+            if len(ind) == 2:
+                inp_tensor[ind[0], ind[1]] = m
+            elif len(ind) == 1:
+                inp_tensor[ind[0]] = m
+    return inp_tensor
+
+
+class SinkhornKnopp(torch.nn.Module):
+    def __init__(self, num_iters=3, epsilon=0.05):
+        super().__init__()
+        self.num_iters = num_iters
+        self.epsilon = epsilon
+
+    @torch.no_grad()
+    def iterate(self, Q):
+        Q = shoot_infs(Q)
+        sum_Q = torch.sum(Q)
+        Q /= sum_Q
+        r = torch.ones(Q.shape[0])/ Q.shape[0]
+        c = torch.ones(Q.shape[1])/ Q.shape[1]
+        r=r.cuda()
+        c=c.cuda()
+        for it in range(self.num_iters):
+            u = torch.sum(Q, dim=1)
+            u = r/ u
+            u = shoot_infs(u)
+            Q *= u.unsqueeze(1)
+            Q *= (c / torch.sum(Q, dim=0)).unsqueeze(0)
+        return (Q / torch.sum(Q, dim=0, keepdim=True)).t().float()
+
+    @torch.no_grad()
+    def forward(self, logits):
+        # get assignments
+        q = logits / self.epsilon
+        M = torch.max(q)
+        q -= M
+        q = torch.exp(q).t()
+        return self.iterate(q)
+if __name__ == '__main__':
+    a=torch.randn([3,3,3,3])
+    a= a.permute(0, 2, 3, 1)
+    a=a.reshape(3*3*3,3)
+    print(a.shape)
+    cluster=SinkhornKnopp()
+    b=cluster(a)
+    print(b.shape)
+    print(b)
