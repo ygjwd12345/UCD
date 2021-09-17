@@ -1,13 +1,11 @@
-import matplotlib
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
-
+import matplotlib
 matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 
 class _StreamMetrics(object):
-
     def __init__(self):
         """ Overridden by subclasses """
         pass
@@ -37,7 +35,6 @@ class StreamSegMetrics(_StreamMetrics):
     """
     Stream Metrics for Semantic Segmentation Task
     """
-
     def __init__(self, n_classes):
         super().__init__()
         self.n_classes = n_classes
@@ -52,16 +49,16 @@ class StreamSegMetrics(_StreamMetrics):
     def to_str(self, results):
         string = "\n"
         for k, v in results.items():
-            if k != "Class IoU" and k != "Class Acc" and k != "Confusion Matrix":
-                string += "%s: %f\n" % (k, v)
-
-        string += 'Class IoU:\n'
+            if k!="Class IoU" and k!="Class Acc" and k!="Confusion Matrix":
+                string += "%s: %f\n"%(k, v)
+        
+        string+='Class IoU:\n'
         for k, v in results['Class IoU'].items():
-            string += "\tclass %d: %s\n" % (k, str(v))
+            string += "\tclass %d: %s\n"%(k, str(v))
 
-        string += 'Class Acc:\n'
+        string+='Class Acc:\n'
         for k, v in results['Class Acc'].items():
-            string += "\tclass %d: %s\n" % (k, str(v))
+            string += "\tclass %d: %s\n"%(k, str(v))
 
         return string
 
@@ -69,7 +66,7 @@ class StreamSegMetrics(_StreamMetrics):
         mask = (label_true >= 0) & (label_true < self.n_classes)
         hist = np.bincount(
             self.n_classes * label_true[mask].astype(int) + label_pred[mask],
-            minlength=self.n_classes**2,
+            minlength=self.n_classes ** 2,
         ).reshape(self.n_classes, self.n_classes)
         return hist
 
@@ -95,21 +92,19 @@ class StreamSegMetrics(_StreamMetrics):
         freq = hist.sum(axis=1) / hist.sum()
         fwavacc = (freq[freq > 0] * iu[freq > 0]).sum()
         cls_iu = dict(zip(range(self.n_classes), [iu[i] if m else "X" for i, m in enumerate(mask)]))
-        cls_acc = dict(
-            zip(range(self.n_classes), [acc_cls_c[i] if m else "X" for i, m in enumerate(mask)])
-        )
+        cls_acc = dict(zip(range(self.n_classes), [acc_cls_c[i] if m else "X" for i, m in enumerate(mask)]))
 
         return {
-            "Total samples": self.total_samples,
-            "Overall Acc": acc,
-            "Mean Acc": acc_cls,
-            "FreqW Acc": fwavacc,
-            "Mean IoU": mean_iu,
-            "Class IoU": cls_iu,
-            "Class Acc": cls_acc,
-            "Confusion Matrix": self.confusion_matrix_to_fig()
-        }
-
+                "Total samples":  self.total_samples,
+                "Overall Acc": acc,
+                "Mean Acc": acc_cls,
+                "FreqW Acc": fwavacc,
+                "Mean IoU": mean_iu,
+                "Class IoU": cls_iu,
+                "Class Acc": cls_acc,
+                "Confusion Matrix": self.confusion_matrix_to_fig()
+            }
+        
     def reset(self):
         self.confusion_matrix = np.zeros((self.n_classes, self.n_classes))
         self.total_samples = 0
@@ -127,27 +122,29 @@ class StreamSegMetrics(_StreamMetrics):
             self.total_samples = samples.cpu().numpy()
 
     def confusion_matrix_to_fig(self):
-        cm = self.confusion_matrix.astype('float') / (self.confusion_matrix.sum(axis=1) +
-                                                      0.000001)[:, np.newaxis]
+        cm = self.confusion_matrix.astype('float') / (self.confusion_matrix.sum(axis=1)+0.000001)[:, np.newaxis]
         fig, ax = plt.subplots()
-        im = ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
-        ax.figure.colorbar(im, ax=ax)
+        im = ax.imshow(cm, interpolation='nearest', cmap=plt.cm.binary)
+        # ax.figure.colorbar(im, ax=ax)
 
-        ax.set(title=f'Confusion Matrix', ylabel='True label', xlabel='Predicted label')
+        ax.set(title=f'Confusion Matrix',
+               ylabel='True label',
+               xlabel='Predicted label')
 
         fig.tight_layout()
+        ## save confusion matrx
+        fig.savefig("confusion_matrix.png")
         return fig
 
 
 class AverageMeter(object):
     """Computes average values"""
-
     def __init__(self):
         self.book = dict()
 
     def reset_all(self):
         self.book.clear()
-
+    
     def reset(self, id):
         item = self.book.get(id, None)
         if item is not None:
@@ -159,10 +156,14 @@ class AverageMeter(object):
         if record is None:
             self.book[id] = [val, 1]
         else:
-            record[0] += val
-            record[1] += 1
+            record[0]+=val
+            record[1]+=1
 
     def get_results(self, id):
         record = self.book.get(id, None)
         assert record is not None
         return record[0] / record[1]
+
+
+
+

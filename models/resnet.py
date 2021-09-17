@@ -5,7 +5,6 @@ from functools import partial
 import torch.nn as nn
 
 from modules import GlobalAvgPool2d, ResidualBlock
-
 from .util import try_index
 
 
@@ -29,15 +28,13 @@ class ResNet(nn.Module):
         If `True` output a list with the outputs of all modules
     """
 
-    def __init__(
-        self,
-        structure,
-        bottleneck,
-        norm_act=nn.BatchNorm2d,
-        classes=0,
-        output_stride=16,
-        keep_outputs=False
-    ):
+    def __init__(self,
+                 structure,
+                 bottleneck,
+                 norm_act=nn.BatchNorm2d,
+                 classes=0,
+                 output_stride=16,
+                 keep_outputs=False):
         super(ResNet, self).__init__()
         self.structure = structure
         self.bottleneck = bottleneck
@@ -59,7 +56,8 @@ class ResNet(nn.Module):
 
         # Initial layers
         layers = [
-            ("conv1", nn.Conv2d(3, 64, 7, stride=2, padding=3, bias=False)), ("bn1", norm_act(64))
+            ("conv1", nn.Conv2d(3, 64, 7, stride=2, padding=3, bias=False)),
+            ("bn1", norm_act(64))
         ]
         if try_index(dilation, 0) == 1:
             layers.append(("pool1", nn.MaxPool2d(3, stride=2, padding=1)))
@@ -76,19 +74,10 @@ class ResNet(nn.Module):
             blocks = []
             for block_id in range(num):
                 stride, dil = self._stride_dilation(dilation, mod_id, block_id)
-                blocks.append(
-                    (
-                        "block%d" % (block_id + 1),
-                        ResidualBlock(
-                            in_channels,
-                            channels,
-                            norm_act=norm_act,
-                            stride=stride,
-                            dilation=dil,
-                            last=block_id == num - 1
-                        )
-                    )
-                )
+                blocks.append((
+                    "block%d" % (block_id + 1),
+                    ResidualBlock(in_channels, channels, norm_act=norm_act, stride=stride, dilation=dil)
+                ))
 
                 # Update channels and p_keep
                 in_channels = channels[-1]
@@ -103,11 +92,10 @@ class ResNet(nn.Module):
 
         # Pooling and predictor
         if classes != 0:
-            self.classifier = nn.Sequential(
-                OrderedDict(
-                    [("avg_pool", GlobalAvgPool2d()), ("fc", nn.Linear(in_channels, classes))]
-                )
-            )
+            self.classifier = nn.Sequential(OrderedDict([
+                ("avg_pool", GlobalAvgPool2d()),
+                ("fc", nn.Linear(in_channels, classes))
+            ]))
 
     @staticmethod
     def _stride_dilation(dilation, mod_id, block_id):
@@ -116,59 +104,29 @@ class ResNet(nn.Module):
         return s, d
 
     def forward(self, x):
-        outs = []
-        attentions = []
+        outs = list()
 
-        x = self.mod1(x)
-        #attentions.append(x)
-        outs.append(x)
-
-        x, att = self.mod2(x)
-        attentions.append(att)
-        outs.append(x)
-
-        x, att = self.mod3(x)
-        attentions.append(att)
-        outs.append(x)
-
-        x, att = self.mod4(x)
-        attentions.append(att)
-        outs.append(x)
-
-        x, att = self.mod5(x)
-        attentions.append(att)
-        outs.append(x)
+        outs.append(self.mod1(x))
+        outs.append(self.mod2(outs[-1]))
+        outs.append(self.mod3(outs[-1]))
+        outs.append(self.mod4(outs[-1]))
+        outs.append(self.mod5(outs[-1]))
 
         if hasattr(self, "classifier"):
             outs.append(self.classifier(outs[-1]))
 
         if self.keep_outputs:
-            return outs, attentions
+            return outs
         else:
-            return outs[-1], attentions
+            return outs[-1]
 
 
 _NETS = {
-    "18": {
-        "structure": [2, 2, 2, 2],
-        "bottleneck": False
-    },
-    "34": {
-        "structure": [3, 4, 6, 3],
-        "bottleneck": False
-    },
-    "50": {
-        "structure": [3, 4, 6, 3],
-        "bottleneck": True
-    },
-    "101": {
-        "structure": [3, 4, 23, 3],
-        "bottleneck": True
-    },
-    "152": {
-        "structure": [3, 8, 36, 3],
-        "bottleneck": True
-    },
+    "18": {"structure": [2, 2, 2, 2], "bottleneck": False},
+    "34": {"structure": [3, 4, 6, 3], "bottleneck": False},
+    "50": {"structure": [3, 4, 6, 3], "bottleneck": True},
+    "101": {"structure": [3, 4, 23, 3], "bottleneck": True},
+    "152": {"structure": [3, 8, 36, 3], "bottleneck": True},
 }
 
 __all__ = []
