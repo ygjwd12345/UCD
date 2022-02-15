@@ -81,12 +81,8 @@ class IncrementalSegmentationModule(nn.Module):
         self.head_channels = head_channels
         self.tot_classes = reduce(lambda a, b: a + b, self.classes)
         self.softmax = nn.Softmax(dim=1)
-        ### SE module
-        self.selayer_2048 = SELayer(channel=2048).cuda()
-        self.selayer_256 = SELayer(channel=256).cuda()
-        ### multi-head module self attention
-        # self.multihead_att_2048= multi_head_attenionLayerN(2048).cuda()
-        # self.multihead_att_256= multi_head_attenionLayerN(256).cuda()
+
+
     def att_map(self,x):
         ### sptial attention
         a = torch.sum(x ** 2, dim=1)
@@ -96,21 +92,6 @@ class IncrementalSegmentationModule(nn.Module):
         a = torch.unsqueeze(a, 1)
         x = a.detach() * x
         return x
-    def satt_map(self,x):
-        # ### channel attention
-        bs, W, h, w = x.size()
-        if W == 2048:
-            x = x+self.selayer_2048(x)
-        else:
-            x = x+self.selayer_256(x)
-        a = torch.sum(x ** 2, dim=1)
-        for i in range(a.shape[0]):
-            a[i] = a[i] / torch.norm(a[i])
-        a = torch.unsqueeze(a, 1)
-        x = a.detach() * x
-
-        return x
-
     def _network(self, x,x_b_old=None,x_pl_old=None, ret_intermediate=False):
         # x_b.shape=[bs,2048,32,32] x_pl.shape=[bs,256,32,32] x_o.shape=[bs,ch_out+1,32,32]
         ### for origin and reproduce
@@ -122,16 +103,8 @@ class IncrementalSegmentationModule(nn.Module):
         for mod in self.cls:
             out.append(mod(x_pl))
         x_o = torch.cat(out, dim=1)
-
-
-
-        ### Attentive Feature Distillation(AFD)
         x_b=self.att_map(x_b)
         x_pl=self.att_map(x_pl)
-        ### cm Attentive Feature Distillation(AFD)
-        # x_b=self.multihead_att_2048(x_b_old, x_b)
-        # x_pl=self.multihead_att_256(x_pl_old, x_pl)
-
         return x_o, x_b,  x_pl
 
 
@@ -168,53 +141,3 @@ class IncrementalSegmentationModule(nn.Module):
                 m.eval()
                 m.weight.requires_grad = False
                 m.bias.requires_grad = False
-class SELayer(nn.Module):
-    def __init__(self, channel, reduction=16):
-        super(SELayer, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(
-            nn.Linear(channel, channel // reduction, bias=False),
-            nn.ReLU(inplace=True),
-            nn.Linear(channel // reduction, channel, bias=False),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        b, c, _, _ = x.size()
-        y = self.avg_pool(x).view(b, c)
-        y = self.fc(y).view(b, c, 1, 1)
-        return x * y.expand_as(x)
-
-
-class multi_head_attenionLayerN(nn.Module):
-    def __init__(self, channel):
-        super(multi_head_attenionLayerN, self).__init__()
-        self.self_att_old=NONLocalBlock2D(in_channels=channel)
-        self.self_att_new=NONLocalBlock2D(in_channels=channel)
-        self.confuslayer=nn.Conv2d(2*channel, channel, 1)
-    def att_map(self, x):
-        ### sptial attention
-        a = torch.sum(x ** 2, dim=1)
-        ### channel attention
-        for i in range(a.shape[0]):
-            a[i] = a[i] / torch.norm(a[i])
-        a = torch.unsqueeze(a, 1)
-        x = a.detach() * x
-        return x
-
-    def forward(self,x_old, x_new):
-        b, c, _, _ = x_new.size()
-
-        if x_old is None:
-            # z_new = self.self_att_new(x_new)
-            z_=x_new
-            # print('skip')
-        else:
-            z_old=self.self_att_old(x_old)
-            z_new=self.self_att_new(x_new)
-            z_ = torch.cat((z_old, z_new), dim=1)
-            z_ =self.confuslayer(z_)
-
-        out=self.att_map(z_)
-
-        return out

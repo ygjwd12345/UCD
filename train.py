@@ -29,7 +29,6 @@ class Trainer:
         # Select the Loss Type
         reduction = 'none'
         ### select contrastive loss
-        # self.conloss=PixelConLoss(temperature=opts.temperature)
         self.conloss=PixelConLossV2(temperature=opts.temperature)
 
         self.bce = opts.bce or opts.icarl
@@ -37,7 +36,6 @@ class Trainer:
             self.criterion = BCEWithLogitsLossWithIgnoreIndex(reduction=reduction)
         elif opts.unce and self.old_classes != 0:
             self.criterion = UnbiasedCrossEntropy(old_cl=self.old_classes, ignore_index=255, reduction=reduction)
-            # self.criterion = MaskCrossEntropy(old_cl=self.old_classes, ignore_index=255, reduction=reduction)
         else:
             self.criterion = nn.CrossEntropyLoss(ignore_index=255, reduction=reduction)
 
@@ -50,7 +48,6 @@ class Trainer:
         self.lkd_flag = self.lkd > 0. and model_old is not None
         if opts.unkd:
             self.lkd_loss = UnbiasedKnowledgeDistillationLoss(alpha=opts.alpha)
-            # self.lkd_loss = MaskKnowledgeDistillationLoss(alpha=opts.alpha)
 
         else:
             self.lkd_loss = KnowledgeDistillationLoss(alpha=opts.alpha)
@@ -110,35 +107,14 @@ class Trainer:
             else:
                 outputs, features = model(images,x_b_old=features_old['body'],x_pl_old=features_old['pre_logits'], ret_intermediate=self.ret_intermediate)
             # for contrastive loss
-            # if not self.icarl_only_dist:
-            #     if self.model_old is None:
-            #         labels_ = labels
-            #         # out_cls, label_cls = pre_contractive_pixel(features['pre_logits'], labels_)
-            #         ### origin
-            #         loss = criterion(outputs, labels).mean()
-            #         ### for contrastive
-            #         # loss = criterion(outputs, labels).mean()+self.conloss(out_cls,label_cls)/10
-            #
-            #     else:
-            #         labels_ = labels
-            #         ### single contrast loss
-            #         # out_cls, label_cls = pre_contractive_pixel(features['pre_logits'], labels_)
-            #
-            #         ### for joint contrastive loss
-            #         # out_cls, label_cls = pre_contractive_pixel(features['pre_logits'], labels_,f_o=features_old['pre_logits'])
-            #         ### mix pseudo label and gt
-            #         # out_cls, label_cls = pre_contractive_pixel(features['pre_logits'], labels_,l_po=features_old['sem'],f_o=features_old['pre_logits'])
-            #         ### without joint probility mask
-            #         # loss = criterion(outputs, labels).mean()+self.conloss(out_cls,label_cls)/100
-            #         ### mix mix pseudo label and gt with joint probility mask
-            #         out_cls, label_cls,JP_m = pre_contractive_pixel(features['pre_logits'], labels_,l_po=features_old['sem'],f_o=features_old['pre_logits'])
-            #         loss = criterion(outputs, labels).mean()+self.conloss(out_cls,label_cls,JP_m)/100
-            # xxx BCE / Cross Entropy Loss
             if not self.icarl_only_dist:
-                loss = criterion(outputs, labels)  # B x H x W
-            else:
-                loss = self.licarl(outputs, labels, torch.sigmoid(outputs_old))
-            loss = loss.mean()  # scalar
+                if self.model_old is None:
+                    loss = criterion(outputs, labels).mean()
+                else:
+                    labels_ = labels
+                    out_cls, label_cls,JP_m = pre_contractive_pixel(features['pre_logits'], labels_,l_po=features_old['sem'],f_o=features_old['pre_logits'])
+                    loss = criterion(outputs, labels).mean()+self.conloss(out_cls,label_cls,JP_m)/100
+
 
             if self.icarl_combined:
                 # tensor.narrow( dim, start, end) -> slice tensor from start to end in the specified dim
@@ -155,8 +131,6 @@ class Trainer:
             if self.lkd_flag:
                 # resize new output to remove new logits and keep only the old ones
                 lkd = self.lkd * self.lkd_loss(outputs, outputs_old)
-                ### for mask kd
-                # lkd = self.lkd * self.lkd_loss(outputs, outputs_old,labels)
             # xxx first backprop of previous loss (compute the gradients for regularization methods)
             loss_tot = loss + lkd + lde + l_icarl
 
@@ -368,31 +342,6 @@ class Trainer:
                 a = torch.unsqueeze(a, 1)
                 a = F.interpolate(a, size=out_size, mode="bilinear", align_corners=False).squeeze()
                 metrics.update(labels, prediction)
-                # ### tsne
-                labels_ = labels
-                out_cls, label_cls = pre_contractive_pixel(features['pre_logits'], labels_)
-                b_out=out_cls[label_cls>0].squeeze().cpu()
-                b_label=label_cls[label_cls>0].cpu()
-                colormap_dir = './city-tsne'
-                if not os.path.isdir(colormap_dir):
-                    os.mkdir(colormap_dir)
-                from sklearn.manifold import TSNE
-                from matplotlib import pyplot as plt
-                import seaborn as sns
-                colors = sns.color_palette('pastel').as_hex() + sns.color_palette('dark').as_hex()
-                print('tsne start!!!')
-                tsne = TSNE(n_components=2, random_state=0,n_jobs=16)
-                out_2d = tsne.fit_transform(b_out)
-                print('tsne done!!!')
-                # plot the result
-                vis_x = out_2d[:, 0]
-                vis_y = out_2d[:, 1]
-                fig, ax = plt.subplots()
-                # colors = sns.color_palette('muted').as_hex()[:20][::-1]
-                for j in np.unique(b_label):
-                    plt.scatter(vis_x[b_label == j], vis_y[b_label == j], c=colors[j-1])
-                # plt.colorbar(ticks=range(21))
-                fig.tight_layout()
                 ## save confusion matrx
                 fig.savefig(os.path.join(colormap_dir, str(i)+'_tsne.png'))
 

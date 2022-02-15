@@ -18,8 +18,7 @@ from dataset import transform
 from metrics import StreamSegMetrics
 
 from segmentation_module import make_model
-### for cluster
-# from segmentation_module_sluster import make_model
+
 
 from train import Trainer
 import tasks
@@ -408,6 +407,6 @@ if __name__ == '__main__':
     opts = argparser.modify_command_options(opts)
     print(opts.dataset)
     if withwandb:
-        wandb.init(project="cil_pami", group=opts.dataset)
+        wandb.init(project="UCD_pami", group=opts.dataset)
     os.makedirs("checkpoints/step", exist_ok=True)
     main(opts)

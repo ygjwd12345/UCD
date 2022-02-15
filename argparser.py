@@ -32,14 +32,8 @@ def modify_command_options(opts):
         if opts.method == 'PI':
             opts.regularizer = "pi"
             opts.reg_importance = 500
-        if opts.method == 'MiB':
+        if opts.method == 'UCD':
             opts.loss_kd = 10
-            opts.unce = True
-            opts.unkd = True
-            opts.init_balanced = True
-        if opts.method == 'att':
-            opts.loss_kd = 10
-            # opts.loss_de = 1000
             opts.unce = True
             opts.unkd = True
             opts.init_balanced = True

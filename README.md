@@ -17,6 +17,8 @@ This repository uses the following libraries:
 We also assume to have installed pytorch.distributed package.
 
 To facilitate your work in installing all dependencies, we provide you the requirement (requirements.txt) file.
+
+We also support docker image. You can build your own docker image via Dockerfile.
 # How to download data
 In this project we use two dataset, ADE20K and Pascal-VOC 2012. 
 We provide the scripts to download them in 'data/download_\<dataset_name\>.sh'.
@@ -37,38 +39,31 @@ If you don't want to use pretrained, please use --no-pretrained.
 There are many options (you can see them all by using --help option), but we arranged the code to being straightforward to test the reported methods.
 Leaving all the default parameters, you can replicate the experiments by setting the following options.
 - please specify the data folder using: --data_root \<data_root\> 
-- dataset: --dataset voc (Pascal-VOC 2012) | ade (ADE20K)
+- dataset: --dataset voc (Pascal-VOC 2012) | ade (ADE20K) | city (Cityscapes)
 - task: --task \<task\>, where tasks are
-    - 15-5, 15-5s, 19-1 (VOC), 100-50, 100-10, 50, 100-50b, 100-10b, 50b (ADE, b indicates the order)
+    - 15-5, 15-5s, 19-1, 10-10, 10-10s (VOC), 100-50, 100-10, 50(ADE, b indicates the order), 17-2 , 13-6, 13-6s (city)
 - step (each step is run separately): --step \<N\>, where N is the step number, starting from 0
 - (only for Pascal-VOC) disjoint is default setup, to enable overlapped: --overlapped
 - learning rate: --lr 0.01 (for step 0) | 0.001 (for step > 0) 
 - batch size: --batch_size \<24/num_GPUs\>
-- epochs: --epochs 30 (Pascal-VOC 2012) | 60 (ADE20K)
+- epochs: --epochs 30 (Pascal-VOC 2012) | 60 (ADE20K) | 60 (Cityscapes)
 - method: --method \<method name\>, where names are
-    - FT, LWF, LWF-MC, ILT, EWC, RW, PI, MIB
+    - FT, LWF, LWF-MC, ILT, EWC, RW, PI, UCD
     
 For all details please follow the information provided using the help option.
 
 #### Example commands
 
-LwF on the 100-50 setting of ADE20K, step 0:
-> python -m torch.distributed.launch --nproc_per_node=2 run.py --data_root data --batch_size 12 --dataset ade --name LWF --task 100-50 --step 0 --lr 0.01 --epochs 60 --method LWF
+UCD on the 50 setting of ADE20K, step 2:
+> python -m torch.distributed.launch --nproc_per_node=2 run.py --data_root ./dataset --batch_size 12 --dataset ade --name UCD --task 100-50 --step 2 --lr 0.001 --epochs 60 --method UCD
 
-MIB on the 50b setting of ADE20K, step 2:
-> python -m torch.distributed.launch --nproc_per_node=2 run.py --data_root data --batch_size 12 --dataset ade --name MIB --task 100-50 --step 2 --lr 0.001 --epochs 60 --method MIB
-
-LWF-MC on 15-5 disjoint setting of VOC, step 1:
-> python -m torch.distributed.launch --nproc_per_node=2 run.py --data_root data --batch_size 12 --dataset voc --name LWF-MC --task 15-5 --step 1 --lr 0.001 --epochs 30 --method LWF-MC
-
-RW on 15-1 overlapped setting of VOC, step 1:
-> python -m torch.distributed.launch --nproc_per_node=2 run.py --data_root data --batch_size 12 --dataset voc --name LWF-MC --task 15-5s --overlapped --step 1 --lr 0.001 --epochs 30 --method RW
+UCD on 15-1 overlapped setting of VOC, step 1:
+> python -m torch.distributed.launch --nproc_per_node=2 run.py --data_root ./dataset --batch_size 12 --dataset voc --name UCD --task 15-5s --overlapped --step 1 --lr 0.001 --epochs 30 --method UCD
 
 Once you trained the model, you can see the result on tensorboard (we perform the test after the whole training)
  or you can test it by using the same script and parameters but using the command 
-> --test
+> python -m torch.distributed.launch --nproc_per_node=1 test.py --data_root ./dataset --batch_size 80 --dataset voc --name UCD --task 19-1 --step 1 --lr 0.01 --epochs 30 --method UCD --step_ckpt ./path/to/checkpoint;
 
-that will skip all the training procedure and test the model on test data.
 
 ## Result:
 <img src="image/result1.png" width="1000"/>

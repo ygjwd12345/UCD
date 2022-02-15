@@ -218,24 +218,24 @@ def main(opts):
     denorm = utils.Denormalize(mean=[0.485, 0.456, 0.406],
                                std=[0.229, 0.224, 0.225])  # de-normalization for original images
 
-    # colormap_dir = './voc'
-    # if not os.path.isdir(colormap_dir):
-    #     os.mkdir(colormap_dir)
+    colormap_dir = './voc'
+    if not os.path.isdir(colormap_dir):
+        os.mkdir(colormap_dir)
 
     ###
-    # for k, (img, target, lbl, att) in enumerate(ret_samples):
-    #
-    #     img = (denorm(img) * 255).transpose(1,2,0).astype(np.uint8)
-    #     ## BGR to RGB
-    #     b, g, r = cv2.split(img)
-    #     img = cv2.merge([r, g, b])
-    #     cv2.imwrite(os.path.join(colormap_dir, str(k).zfill(4) + 'pre.png'),lbl)
-    #     cv2.imwrite(os.path.join(colormap_dir, str(k).zfill(4) + 'gt.jpg'), target)
-    #     target = label2color(target).astype(np.uint8)
-    #     lbl = label2color(lbl).astype(np.uint8)
-    #     cv2.imwrite(os.path.join(colormap_dir, str(k).zfill(4) + 'pre_clo.png'),lbl)
-    #     cv2.imwrite(os.path.join(colormap_dir, str(k).zfill(4) + 'gt_clo.jpg'), target)
-    #     cv2.imwrite(os.path.join(colormap_dir, str(k).zfill(4) + 'rgb.jpg'), img)
+    for k, (img, target, lbl, att) in enumerate(ret_samples):
+
+        img = (denorm(img) * 255).transpose(1,2,0).astype(np.uint8)
+        ## BGR to RGB
+        b, g, r = cv2.split(img)
+        img = cv2.merge([r, g, b])
+        cv2.imwrite(os.path.join(colormap_dir, str(k).zfill(4) + 'pre.png'),lbl)
+        cv2.imwrite(os.path.join(colormap_dir, str(k).zfill(4) + 'gt.jpg'), target)
+        target = label2color(target).astype(np.uint8)
+        lbl = label2color(lbl).astype(np.uint8)
+        cv2.imwrite(os.path.join(colormap_dir, str(k).zfill(4) + 'pre_clo.png'),lbl)
+        cv2.imwrite(os.path.join(colormap_dir, str(k).zfill(4) + 'gt_clo.jpg'), target)
+        cv2.imwrite(os.path.join(colormap_dir, str(k).zfill(4) + 'rgb.jpg'), img)
         ### for att vis
         # import matplotlib.colors as colors
         # import matplotlib.cm as cmx
