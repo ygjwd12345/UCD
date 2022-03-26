@@ -1,5 +1,9 @@
 # UCD
 The offical Pytorch code for "Uncertainty-aware Contrastive Distillation for Incremental Semantic Segmentation"
+
+Guanglei Yang,Enrico Fini,Dan Xu,Paolo Rota,Mingli Ding,Moin Nabi,Xavier Alameda-Pineda,Elisa Ricci
+
+TPAMI 2022
 ## Overview:
 <img src="image/ESM.png" width="500"/>
 
